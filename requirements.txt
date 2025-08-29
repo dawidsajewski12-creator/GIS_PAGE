@@ -1,0 +1,11 @@
+numpy
+rasterio
+geopandas
+numba
+matplotlib
+scikit-image
+laspy[lazrs]
+pysolar
+pytz
+requests
+gdal
