@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GIS Microclimate Platform – Symulacje CFD i Analizy Geośrodowiskowe</title>
+    
+    <meta name="description" content="Zaawansowana platforma GIS do modelowania przepływu wiatru, oceny zagrożenia powodziowego i komfortu termicznego. Symulacje CFD z metodą Lattice Boltzmann.">
+    <meta name="keywords" content="GIS, CFD, LBM, modelowanie wiatru, symulacja przepływu, analiza geośrodowiskowa">
+    <meta name="author" content="Dawid Sajewski">
+    
+    <!-- Leaflet -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    
+    <!-- Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Styles -->
+    <link rel="stylesheet" href="style.css">
+    
+    <style>
+        /* Results Panel */
+        .results-panel {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            padding: 40px 20px;
+            margin: 20px 0;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+        
+        .results-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .results-header h2 {
+            font-size: 28px;
+            color: #1a3a52;
+            margin: 0 0 10px 0;
+            font-weight: 600;
+        }
+        
+        .results-header .subtitle {
+            color: #557a8c;
+            font-size: 14px;
+            font-style: italic;
+        }
+        
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        
+        .result-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .result-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+        }
+        
+        .result-icon {
+            font-size: 32px;
+            min-width: 50px;
+            text-align: center;
+        }
+        
+        .result-content {
+            flex: 1;
+        }
+        
+        .result-label {
+            font-size: 12px;
+            color: #888;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 5px;
+        }
+        
+        .result-value {
+            font-size: 22px;
+            color: #1a3a52;
+            font-weight: 600;
+        }
+        
+        .result-value .unit {
+            font-size: 12px;
+            color: #999;
+            margin-left: 5px;
+        }
+        
+        .results-info {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #3b82f6;
+            font-size: 13px;
+            line-height: 1.6;
+            color: #444;
+        }
+        
+        .results-info p {
+            margin: 10px 0;
+        }
+        
+        .results-info strong {
+            color: #1a3a52;
+        }
+        
+        /* Map container */
+        #wind-map {
+            height: 500px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            margin: 20px 0;
+            z-index: 1;
+        }
+        
+        /* Dark mode */
+        [data-color-scheme="dark"] .results-panel {
+            background: linear-gradient(135deg, #1a2332 0%, #2d3e50 100%);
+        }
+        
+        [data-color-scheme="dark"] .result-card {
+            background: #2d3e50;
+            color: #e0e0e0;
+        }
+        
+        [data-color-scheme="dark"] .result-label {
+            color: #aaa;
+        }
+        
+        [data-color-scheme="dark"] .result-value {
+            color: #4da6ff;
+        }
+        
+        [data-color-scheme="dark"] .results-info {
+            background: rgba(45, 62, 80, 0.9);
+            color: #d0d0d0;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <i class="fas fa-globe"></i> GIS Microclimate Platform
+            </div>
+            <ul class="nav-menu">
+                <li><a href="#overview" class="nav-link active">Przegląd</a></li>
+                <li><a href="#simulation" class="nav-link">Symulacja</a></li>
+                <li><a href="#blog" class="nav-link">Blog</a></li>
+                <li><a href="#contact" class="nav-link">Kontakt</a></li>
+            </ul>
+            <button class="theme-toggle" id="theme-btn">
+                <i class="fas fa-moon"></i>
+            </button>
+        </div>
+    </nav>
+
+    <div class="main-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-section">
+                <h3>Informacje</h3>
+                <div class="info-box">
+                    <p><strong>Platforma:</strong> GIS Microclimate v3.0</p>
+                    <p><strong>Metoda:</strong> Lattice Boltzmann (D2Q9)</p>
+                    <p><strong>Pochodzenie:</strong> Google Colab + Numba JIT</p>
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <h3>Dane Wejściowe</h3>
+                <ul style="font-size: 12px; line-height: 1.8;">
+                    <li>✅ NMT/NMPT (LIDAR)</li>
+                    <li>✅ Geometria budynków (OSM)</li>
+                    <li>✅ Pogoda (Open-Meteo API)</li>
+                </ul>
+            </div>
+
+            <div class="sidebar-section">
+                <h3>Wyjście Symulacji</h3>
+                <ul style="font-size: 12px; line-height: 1.8;">
+                    <li>📊 Pole wektorowe (13K+ pkt)</li>
+                    <li>🌊 Linie prądu (streamlines)</li>
+                    <li>🔴 Ścieżki cząstek (1K pkt)</li>
+                    <li>📈 Statystyki przepływu</li>
+                </ul>
+            </div>
+        </aside>
+
+        <!-- Content -->
+        <main class="content">
+            <!-- Section 1: Overview -->
+            <section id="overview" class="hero-section">
+                <h1>Zaawansowana Platforma do Modelowania Mikroklimatu</h1>
+                <p class="subtitle">
+                    Profesjonalne symulacje CFD oparte na danych geoprzestrzennych. 
+                    Modelowanie przepływu wiatru, ocena zagrożeń powodziowych, analiza komfortu termicznego.
+                </p>
+                
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <i class="fas fa-wind"></i>
+                        <h3>Symulacja Wiatru</h3>
+                        <p>Metoda Lattice Boltzmann z obsługą przeszkód i warunków brzegowych</p>
+                    </div>
+                    <div class="feature-card">
+                        <i class="fas fa-water"></i>
+                        <h3>Modelowanie Powodzi</h3>
+                        <p>Hydrodynamika 2D z wykorzystaniem modelu RIM2D</p>
+                    </div>
+                    <div class="feature-card">
+                        <i class="fas fa-thermometer-half"></i>
+                        <h3>Komfort Termiczny</h3>
+                        <p>Indeksy PMV/PPD/UTCI dla analiz mikroklimatu</p>
+                    </div>
+                    <div class="feature-card">
+                        <i class="fas fa-database"></i>
+                        <h3>Otwarte Dane</h3>
+                        <p>Integracja z Open-Meteo, Copernicus DEM, OpenStreetMap</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Section 2: Simulation Results -->
+            <section id="simulation" class="simulation-section">
+                <h2>Wyniki Bieżącej Symulacji</h2>
+                
+                <!-- Map -->
+                <div id="wind-map"></div>
+                
+                <!-- Results Panel -->
+                <div id="results-panel" class="results-panel">
+                    <div class="loading">
+                        <i class="fas fa-spinner fa-spin"></i> Ładowanie wyników...
+                    </div>
+                </div>
+            </section>
+
+            <!-- Section 3: Blog -->
+            <section id="blog" class="blog-section">
+                <h2>Blog & Artykuły</h2>
+                <div class="blog-grid">
+                    <article class="blog-post">
+                        <h3>Wprowadzenie do Metody Lattice Boltzmann</h3>
+                        <p class="post-date">19 listopada 2025</p>
+                        <p>
+                            Lattice Boltzmann Method (LBM) to podejście do modelowania płynów opartym na kinetycznej teorii gazów.
+                            Zamiast rozwiązywać równania Naviera-Stokesa bezpośrednio, LBM symuluje przepływ na mikroskopowym poziomie...
+                        </p>
+                        <a href="#" class="read-more">Czytaj więcej →</a>
+                    </article>
+                    
+                    <article class="blog-post">
+                        <h3>Integracja Danych Geoprzestrzennych w GIS</h3>
+                        <p class="post-date">18 listopada 2025</p>
+                        <p>
+                            Analiza multi-źródłowa danych geoprzestrzennych umożliwia kompleksową ocenę zagrożeń i planowanie urbane.
+                            Ta platforma łączy LIDAR, OSM i dane meteorologiczne w jedno spójne rozwiązanie...
+                        </p>
+                        <a href="#" class="read-more">Czytaj więcej →</a>
+                    </article>
+                    
+                    <article class="blog-post">
+                        <h3>Optymalizacja Obliczeń z Numba JIT</h3>
+                        <p class="post-date">17 listopada 2025</p>
+                        <p>
+                            Numba JIT compiler umożliwia 80-100x przyspieszenie obliczeń w Pythonie.
+                            W tym projekcie LBM kernel został zoptymalizowany do ~6.6M komórek/sekundę...
+                        </p>
+                        <a href="#" class="read-more">Czytaj więcej →</a>
+                    </article>
+                </div>
+            </section>
+
+            <!-- Section 4: Contact -->
+            <section id="contact" class="contact-section">
+                <h2>Kontakt & Współpraca</h2>
+                <div class="contact-content">
+                    <div class="contact-info">
+                        <h3>Dawid Sajewski</h3>
+                        <p><strong>Specjalność:</strong> Analityk Danych Teledetekcyjnych & GIS Specialist</p>
+                        <p><strong>Lokalizacja:</strong> Elbląg, Polska</p>
+                        <p><strong>Języki:</strong> Polski (rodzinny), Angielski (B1/B2), Włoski (A2/B1)</p>
+                        
+                        <h4>Kanały kontaktowe:</h4>
+                        <ul class="contact-links">
+                            <li>
+                                <a href="https://github.com/dawidsajewski12-creator" target="_blank">
+                                    <i class="fab fa-github"></i> GitHub
+                                </a>
+                            </li>
+                            <li>
+                                <a href="https://linkedin.com/in/dawidsajewski" target="_blank">
+                                    <i class="fab fa-linkedin"></i> LinkedIn
+                                </a>
+                            </li>
+                            <li>
+                                <a href="mailto:contact@example.com">
+                                    <i class="fas fa-envelope"></i> Email
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+                    
+                    <div class="contact-form">
+                        <h3>Wyślij wiadomość</h3>
+                        <form>
+                            <input type="text" placeholder="Twoje imię" required>
+                            <input type="email" placeholder="Email" required>
+                            <textarea placeholder="Wiadomość" rows="5" required></textarea>
+                            <button type="submit" class="btn btn-primary">Wyślij</button>
+                        </form>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-content">
+            <p>&copy; 2025 Dawid Sajewski | GIS Microclimate Platform v3.0</p>
+            <p>Symulacje CFD | Analiza Geośrodowiskowa | Modelowanie Mikroklimatu</p>
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="app_WORKING.js"></script>
+    
+    <script>
+        // Theme toggle
+        const themeBtn = document.getElementById('theme-btn');
+        themeBtn.addEventListener('click', () => {
+            const html = document.documentElement;
+            const isDark = html.getAttribute('data-color-scheme') === 'dark';
+            html.setAttribute('data-color-scheme', isDark ? 'light' : 'dark');
+            localStorage.setItem('darkMode', !isDark);
+            themeBtn.innerHTML = isDark ? '<i class="fas fa-moon"></i>' : '<i class="fas fa-sun"></i>';
+        });
+        
+        // Restore theme
+        const savedDark = localStorage.getItem('darkMode') === 'true';
+        if (savedDark) {
+            document.documentElement.setAttribute('data-color-scheme', 'dark');
+            themeBtn.innerHTML = '<i class="fas fa-sun"></i>';
+        }
+        
+        // Smooth scroll
+        document.querySelectorAll('a[href^="#"]').forEach(a => {
+            a.addEventListener('click', (e) => {
+                const target = document.querySelector(a.getAttribute('href'));
+                if (target) {
+                    e.preventDefault();
+                    target.scrollIntoView({ behavior: 'smooth' });
+                }
+            });
+        });
+    </script>
+</body>
+</html>
